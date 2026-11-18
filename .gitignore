@@ -1,0 +1,45 @@
+# Ortam
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+dist/
+*.tsbuildinfo
+
+# Karantina ve yerel veri (repoya girmez)
+data/quarantine/
+quarantine/
+
+# ClamAV yerel imza önbelleği
+clamav-db/
+clamav-run/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Docker yerel geçersiz kılma
+docker-compose.override.yml
+node_modules/ 
+.next/ 
+__pycache__/ 
+venv/ 
+.venv/ 
+*.log

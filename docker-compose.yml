@@ -1,0 +1,168 @@
+name: zenguard
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: zenguard-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    networks:
+      - zenguard
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  redis:
+    image: redis:7-alpine
+    container_name: zenguard-redis
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --requirepass
+      - ${REDIS_PASSWORD}
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    volumes:
+      - redisdata:/data
+    ports:
+      - "127.0.0.1:6379:6379"
+    networks:
+      - zenguard
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  clamav:
+    image: clamav/clamav:stable
+    container_name: zenguard-clamav
+    restart: unless-stopped
+    volumes:
+      - clamav-db:/var/lib/clamav
+      - clamav-run:/run/clamav
+    expose:
+      - "3310"
+    networks:
+      - zenguard
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/clamdcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: zenguard-backend
+    restart: unless-stopped
+    profiles:
+      - app
+    env_file:
+      - .env
+    environment:
+      CLAMAV_SOCKET: ${CLAMAV_SOCKET}
+      CLAMAV_TCP_ADDR: ${CLAMAV_TCP_ADDR}
+      ZENG_QUARANTINE_DIR: /var/lib/zenguard/quarantine
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      DATABASE_URL_SYNC: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+    volumes:
+      - quarantine:/var/lib/zenguard/quarantine
+      - ./rules:/rules:ro
+    ports:
+      - "127.0.0.1:8000:8000"
+    networks:
+      - zenguard
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      clamav:
+        condition: service_healthy
+    command:
+      - sh
+      - -c
+      - alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: zenguard-worker
+    restart: unless-stopped
+    profiles:
+      - app
+    env_file:
+      - .env
+    environment:
+      CLAMAV_SOCKET: ${CLAMAV_SOCKET}
+      CLAMAV_TCP_ADDR: ${CLAMAV_TCP_ADDR}
+    volumes:
+      - quarantine:/var/lib/zenguard/quarantine
+      - ./rules:/rules:ro
+      - clamav-run:/run/clamav:ro
+    networks:
+      - zenguard
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      clamav:
+        condition: service_healthy
+    # Faz 4: celery -A app.workers.celery_app worker --loglevel=INFO
+    command: ["sleep", "infinity"]
+    # Faz 4: Docker socket for sandbox runner (uncomment when enabling docker sandbox mode)
+    # volumes:
+    #   - /var/run/docker.sock:/var/run/docker.sock
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE: http://127.0.0.1:8000/api/v1
+    container_name: zenguard-frontend
+    restart: unless-stopped
+    profiles:
+      - app
+    ports:
+      - "127.0.0.1:3000:3000"
+    networks:
+      - zenguard
+    depends_on:
+      - backend
+
+networks:
+  zenguard:
+    name: zenguard
+    driver: bridge
+
+volumes:
+  pgdata:
+    name: zenguard-pgdata
+  redisdata:
+    name: zenguard-redisdata
+  clamav-db:
+    name: zenguard-clamav-db
+  clamav-run:
+    name: zenguard-clamav-run
+  quarantine:
+    name: zenguard-quarantine
