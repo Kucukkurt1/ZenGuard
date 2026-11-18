@@ -64,6 +64,12 @@ export type AnalysisReport = {
     static?: { status?: string; signals?: unknown[] };
     archive?: { status?: string; signals?: unknown[] };
   };
+  lines?: Array<{
+    line: number;
+    text: string;
+    rule: string;
+    marker: string;
+  }>;
   score?: {
     mode: string;
     value: number;
@@ -204,6 +210,10 @@ export function getAnalysis(id: string): Promise<AnalysisDetail> {
 
 export function startAnalysis(id: string): Promise<AnalysisUpload> {
   return request<AnalysisUpload>(`/analyses/${id}/run`, { method: "POST" });
+}
+
+export function rescanAnalysis(id: string): Promise<AnalysisUpload> {
+  return request<AnalysisUpload>(`/analyses/${id}/rescan`, { method: "POST" });
 }
 
 export function deleteAnalysis(id: string): Promise<void> {

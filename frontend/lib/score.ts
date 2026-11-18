@@ -12,8 +12,8 @@ export type ComponentKey = keyof typeof COMPONENT_MAX;
 export const COMPONENT_LABEL: Record<ComponentKey, string> = {
   clamav: "ClamAV",
   yara: "YARA",
-  static: "Statik",
-  archive: "Arşiv",
+  static: "Biçim",
+  archive: "Paket",
 };
 
 export type ThreatTone = "safe" | "watch" | "threat" | "pending";

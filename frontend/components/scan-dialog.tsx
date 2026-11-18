@@ -141,7 +141,18 @@ function findingLabel(reason: FindingReason): { engine: string; text: string } {
   if (reason.rule) {
     return { engine: "YARA", text: `${reason.rule}${reason.severity ? ` · ${reason.severity}` : ""}` };
   }
-  return { engine: "Sinyal", text: SIGNAL_LABEL[code] ?? code };
+  const archive =
+    code.startsWith("ARCHIVE") ||
+    code === "encrypted_archive" ||
+    code === "extension_mismatch" ||
+    code === "nested_depth_max" ||
+    code === "high_file_count" ||
+    code === "suspicious_ratio" ||
+    code === "ZIP_BOMB" ||
+    code === "SIZE_LIMIT" ||
+    code === "PATH_TRAVERSAL" ||
+    code === "UNSAFE_MEMBER";
+  return { engine: archive ? "Paket" : "Biçim", text: SIGNAL_LABEL[code] ?? code };
 }
 
 function markIndex(percent: number): number {
@@ -371,6 +382,10 @@ function ResultView({
   const score = detail.risk_score;
   const findings = collectFindings(detail.report)
     .filter((reason) => (reason.points ?? 0) > 0)
+    .filter((reason) => {
+      const engine = findingLabel(reason).engine;
+      return engine === "ClamAV" || engine === "YARA";
+    })
     .sort((a, b) => (b.points ?? 0) - (a.points ?? 0))
     .slice(0, 4);
   const subtitle = detail.error_message || verdict.subtitle;
@@ -397,7 +412,12 @@ function ResultView({
         <h2 id="scan-dialog-title" className="zg-stamp mt-5 text-3xl font-extrabold tracking-wide">
           {verdict.title}
         </h2>
-        <p className={`mt-1 text-sm ${verdict.ink ? "opacity-80" : "text-white/90"}`}>{subtitle}</p>
+        <p className={`mt-1 text-sm ${verdict.ink ? "opacity-80" : "text-white"}`}>{subtitle}</p>
+        {findings.length === 0 && detail.status === "completed" ? (
+          <p className={`mx-auto mt-3 max-w-sm text-sm ${verdict.ink ?? "text-white"}`}>
+            ClamAV, YARA ve biçim incelemesi bu dosyada bulgu üretmedi.
+          </p>
+        ) : null}
 
         <div className="mt-4 flex items-center justify-center gap-2">
           <span className={`rounded-full px-3 py-1 font-mono text-sm font-semibold ${verdict.chip}`}>
@@ -445,10 +465,18 @@ function ResultView({
               );
             })}
           </ul>
-        ) : detail.status === "completed" ? (
-          <p className="zg-muted mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-xs">
-            ClamAV, YARA ve statik analiz bu dosyada bulgu üretmedi.
-          </p>
+        ) : null}
+        {(detail.report?.lines?.length ?? 0) > 0 ? (
+          <div className="mt-4 overflow-hidden rounded-lg bg-emerald-950 text-white">
+            <p className="px-3 pt-2 text-[11px] font-semibold">Eşleşen satırlar</p>
+            <ul className="space-y-1 px-3 pb-3 pt-1 font-mono text-[11px] leading-relaxed">
+              {detail.report?.lines?.slice(0, 4).map((row) => (
+                <li key={`${row.rule}-${row.line}`}>
+                  <span className="text-emerald-300">{row.line}</span> {row.text}
+                </li>
+              ))}
+            </ul>
+          </div>
         ) : null}
 
         <div className="mt-5 flex justify-end gap-2">

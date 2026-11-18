@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { FileUp, LoaderCircle, Trash2 } from "lucide-react";
-import { ApiError, deleteAnalysis, listAnalyses, startAnalysis, uploadAnalysis, type AnalysisSummary } from "@/lib/api";
+import { ApiError, deleteAnalysis, listAnalyses, rescanAnalysis, startAnalysis, uploadAnalysis, type AnalysisSummary } from "@/lib/api";
 import { formatBytes, formatWhen, shortHash } from "@/lib/format";
 import { bandLabel, isTerminal, threatTone } from "@/lib/score";
 import { AppShell } from "@/components/app-shell";
@@ -45,7 +45,6 @@ export function Workspace({
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(initialId);
   const [file, setFile] = useState<File | null>(null);
-  const [rescan, setRescan] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -114,7 +113,7 @@ export function Workspace({
     });
   }
 
-  async function send(next: File, forceRescan = rescan) {
+  async function send(next: File, forceRescan = false) {
     setBusy(true);
     setUploadError(null);
     openScan(next.name, next.size);
@@ -160,6 +159,36 @@ export function Workspace({
       await refreshList();
     } catch (err) {
       const message = err instanceof ApiError ? err.message : "Tarama başlatılamadı.";
+      setUploadError(message);
+      setScanError(message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const selectedCanRescan = selected !== null && isTerminal(selected.status);
+
+  async function rescanSelected() {
+    if (!selectedCanRescan || !selected) return;
+    setBusy(true);
+    setUploadError(null);
+    openScan(selected.original_filename, selected.size_bytes);
+    try {
+      const created = await rescanAnalysis(selected.id);
+      setSelectedId(created.id);
+      setScanJob((current) =>
+        current
+          ? {
+              ...current,
+              id: created.id,
+              filename: created.original_filename,
+              size: created.size_bytes,
+            }
+          : current,
+      );
+      await refreshList();
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : "Yeniden tarama başlatılamadı.";
       setUploadError(message);
       setScanError(message);
     } finally {
@@ -237,16 +266,15 @@ export function Workspace({
             />
           </label>
 
-          <div className="flex items-center justify-between px-4 py-2">
-            <label className="zg-muted inline-flex items-center gap-2 text-xs">
-              <input
-                type="checkbox"
-                checked={rescan}
-                onChange={(event) => setRescan(event.target.checked)}
-                className="h-3.5 w-3.5 rounded border-emerald-300"
-              />
+          <div className="flex items-center justify-end gap-2 px-4 py-2">
+            <button
+              type="button"
+              disabled={busy || !selectedCanRescan}
+              onClick={() => void rescanSelected()}
+              className="zg-muted inline-flex h-8 items-center rounded-md border border-emerald-800/40 px-3 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+            >
               Yeniden tara
-            </label>
+            </button>
             <button
               type="button"
               disabled={busy || (!file && !selectedCanRun)}
@@ -260,15 +288,6 @@ export function Workspace({
               {busy ? "Başlatılıyor" : "Dosyayı Tara"}
             </button>
           </div>
-          <p className="zg-muted -mt-1 px-4 pb-2 text-[11px]">
-            {file
-              ? `${file.name} seçildi. Dosyayı Tara ile kuyruğa alınır.`
-              : selectedCanRun
-                ? `${selected?.original_filename} seçili. Dosyayı Tara bu kaydı başlatır.`
-                  : selected && !isTerminal(selected.status)
-                  ? `${selected.original_filename} taranıyor. İlerleme tarama penceresinde.`
-                  : "Kuyruktaki dosyaya tıklayın ya da yukarıdan yeni dosya seçin. Buton ancak o zaman açılır."}
-          </p>
 
           {uploadError ? (
             <p className="mx-4 mb-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
@@ -297,6 +316,7 @@ export function Workspace({
                       <th className="px-3 py-2 font-semibold">Motor</th>
                       <th className="px-3 py-2 font-semibold">Risk</th>
                       <th className="px-3 py-2 font-semibold">Tarih</th>
+                      <th className="px-2 py-2 text-right font-semibold">Rapor</th>
                       <th className="w-10 px-2 py-2 font-semibold">
                         <span className="sr-only">Sil</span>
                       </th>
@@ -317,16 +337,9 @@ export function Workspace({
                             <span className="zg-title block truncate font-medium">
                               {item.original_filename}
                             </span>
-                            <span className="zg-faint font-mono text-[10px]">
+                            <span className="zg-faint whitespace-nowrap font-mono text-[10px]">
                               {formatBytes(item.size_bytes)}
                             </span>
-                            <Link
-                              href={`/analyses/${item.id}`}
-                              onClick={(event) => event.stopPropagation()}
-                              className="zg-accent mt-0.5 inline-block text-[10px] font-semibold"
-                            >
-                              Detaylı rapor
-                            </Link>
                           </td>
                           <td className="zg-hash px-3 py-2 font-mono text-[11px]" title={item.sha256}>
                             {shortHash(item.sha256)}
@@ -366,6 +379,15 @@ export function Workspace({
                           </td>
                           <td className="zg-faint whitespace-nowrap px-3 py-2 font-mono text-[11px]">
                             {formatWhen(item.created_at)}
+                          </td>
+                          <td className="px-2 py-2 text-right">
+                            <Link
+                              href={`/analyses/${item.id}`}
+                              onClick={(event) => event.stopPropagation()}
+                              className="zg-accent whitespace-nowrap text-[11px] font-semibold"
+                            >
+                              Detaylı rapor
+                            </Link>
                           </td>
                           <td className="px-2 py-2 text-right">
                             <button

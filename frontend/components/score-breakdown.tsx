@@ -6,7 +6,7 @@ import {
   componentOf,
 } from "@/lib/score";
 
-const KEYS: ComponentKey[] = ["clamav", "yara", "static", "archive"];
+const KEYS: ComponentKey[] = ["clamav", "yara"];
 
 const MODE_LABEL: Record<string, string> = {
   weighted_sum: "Parça toplamı",
@@ -22,7 +22,7 @@ export function ScoreBreakdown({ report }: { report: AnalysisReport | null }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="zg-title text-sm font-semibold">Bileşen kırılımı</h3>
+        <h3 className="zg-title text-sm font-semibold">ClamAV ve YARA</h3>
         {mode ? (
           <span className="rounded-full bg-teal-50 px-2.5 py-1 text-[11px] font-semibold text-teal-800">
             {MODE_LABEL[mode] ?? mode}

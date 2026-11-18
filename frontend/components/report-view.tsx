@@ -115,6 +115,11 @@ export function ReportView({ id }: { id: string }) {
               </p>
               <h1 className="mt-2 max-w-3xl text-2xl font-extrabold leading-tight">{narrative.headline}</h1>
               <p className="mt-2 max-w-3xl text-sm opacity-90">{narrative.situation}</p>
+              {narrative.stories.length === 0 && detail.status === "completed" ? (
+                <p className="mt-3 max-w-3xl text-sm">
+                  ClamAV, YARA ve biçim incelemesi bu dosyada bulgu üretmedi.
+                </p>
+              ) : null}
               <div className="mt-4 flex flex-wrap items-center gap-2">
                 <span className={`rounded-full px-3 py-1 font-mono text-sm font-semibold ${banner(detail, narrative).chip}`}>
                   {detail.risk_score === null ? "Skor yok" : `${detail.risk_score}/100`}
@@ -166,13 +171,19 @@ export function ReportView({ id }: { id: string }) {
   );
 }
 
+function isShape(engine: string) {
+  return engine === "Biçim" || engine === "Paket kuralı";
+}
+
 function Summary({ detail, narrative }: { detail: AnalysisDetail; narrative: Narrative }) {
   const members = detail.report?.members ?? [];
+  const motor = narrative.stories.filter((story) => !isShape(story.engine));
+  const shape = narrative.stories.filter((story) => isShape(story.engine));
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
       <div className="space-y-4">
         <p className="zg-title text-sm leading-relaxed">{narrative.lead}</p>
-        {narrative.stories.length > 0 ? (
+        {motor.length > 0 ? (
           <ul className="space-y-2">
             {narrative.stories.reduce((sum, story) => sum + story.points, 0) !== (detail.risk_score ?? 0) ? (
               <li className="zg-muted text-xs leading-relaxed">
@@ -181,7 +192,7 @@ function Summary({ detail, narrative }: { detail: AnalysisDetail; narrative: Nar
                   : `Karttaki puan kuralın tarifesidir. Skora giren ${detail.risk_score ?? 0}.`}
               </li>
             ) : null}
-            {narrative.stories.map((story) => (
+            {motor.map((story) => (
               <li key={story.key} className="zg-line rounded-lg border px-3 py-2">
                 <div className="flex items-baseline justify-between gap-3">
                   <p className="zg-title text-sm font-semibold">{story.title}</p>
@@ -193,10 +204,25 @@ function Summary({ detail, narrative }: { detail: AnalysisDetail; narrative: Nar
               </li>
             ))}
           </ul>
-        ) : detail.status === "completed" ? (
-          <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-            ClamAV imza yazmadı, YARA kuralı eşleşmedi, statik analiz de puanlık bir yapı görmedi.
-          </p>
+        ) : null}
+        {shape.length > 0 ? (
+          <div>
+            <h2 className="zg-title mb-2 text-sm font-semibold">Biçim ve paket</h2>
+            <ul className="space-y-2">
+              {shape.map((story) => (
+                <li key={story.key} className="zg-line rounded-lg border px-3 py-2">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <p className="zg-title text-sm font-semibold">{story.title}</p>
+                    <span className="shrink-0 font-mono text-xs font-semibold text-rose-600">+{story.points}</span>
+                  </div>
+                  <p className="zg-muted mt-1 text-xs">
+                    {story.engine} · {story.where}
+                  </p>
+                  <p className="zg-title mt-2 text-sm leading-relaxed">{story.why}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
         ) : null}
         {members.length > 0 ? (
           <div>
@@ -216,6 +242,43 @@ function Summary({ detail, narrative }: { detail: AnalysisDetail; narrative: Nar
   );
 }
 
+function lineNote(text: string): string {
+  const value = text.toLowerCase();
+  if (value.includes("eicar")) return "Antivirüs test cümlesi. Çalışan bir program değil.";
+  if (value.includes("getasynckeystate") || value.includes("setwindowshookex")) {
+    return "Tuş okuyan çağrıların adı bu satırda geçiyor.";
+  }
+  if (value.includes("downloadstring") || value.includes("-enc") || value.includes("powershell")) {
+    return "Başka bir yerden indirip çalıştırmaya benzeyen kalıp.";
+  }
+  if (value.includes("sifrelendi") || value.includes("bitcoin")) return "Fidye notunda geçen ifade.";
+  if (value.includes("vbaproject")) return "Belgenin içinde makro izi var.";
+  return "Kuralın aradığı dizi bu satırda.";
+}
+
+function MatchedLines({
+  lines,
+}: {
+  lines: NonNullable<NonNullable<AnalysisDetail["report"]>["lines"]>;
+}) {
+  return (
+    <div className="overflow-hidden rounded-xl bg-emerald-950 text-white">
+      <p className="px-4 pt-3 text-xs font-semibold">Eşleşen satırlar</p>
+      <ul className="space-y-3 px-4 py-3">
+        {lines.map((row) => (
+          <li key={`${row.rule}-${row.line}`}>
+            <p className="font-mono text-[12px] leading-relaxed">
+              <span className="mr-2 text-emerald-300">{row.line}</span>
+              {row.text}
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-emerald-50">{lineNote(row.text)}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function Why({ detail, narrative }: { detail: AnalysisDetail; narrative: Narrative }) {
   if (narrative.stories.length === 0) {
     return (
@@ -226,9 +289,37 @@ function Why({ detail, narrative }: { detail: AnalysisDetail; narrative: Narrati
       </p>
     );
   }
+  const lines = detail.report?.lines ?? [];
+  const motor = narrative.stories.filter((story) => !isShape(story.engine));
+  const shape = narrative.stories.filter((story) => isShape(story.engine));
   return (
     <div className="space-y-4">
-      {narrative.stories.map((story) => (
+      {detail.risk_band === "high" || detail.risk_band === "critical" ? (
+        lines.length === 0 ? (
+          <p className="zg-title text-sm">Dosya metin değil. Eşleşen satır çıkarılamadı.</p>
+        ) : (
+          <p className="zg-title text-sm leading-relaxed">
+            Skor yüksek ve dosyanın içi okunabildiği için kuralın tuttuğu satırlar aşağıda. Dosya çalıştırılmadı.
+          </p>
+        )
+      ) : null}
+      {lines.length > 0 ? <MatchedLines lines={lines} /> : null}
+      {motor.length > 0 ? <h2 className="zg-title text-sm font-semibold">ClamAV ve YARA</h2> : null}
+      {motor.map((story) => (
+        <section key={story.key} className="zg-line rounded-xl border px-4 py-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="zg-title text-base font-semibold">{story.title}</h2>
+            <span className="rounded-full bg-rose-50 px-2.5 py-0.5 font-mono text-xs font-semibold text-rose-700">
+              {story.engine} · +{story.points}
+            </span>
+          </div>
+          <p className="zg-faint mt-1 font-mono text-[11px]">Nerede: {story.where}</p>
+          <p className="zg-title mt-3 text-sm leading-relaxed">{story.why}</p>
+          <p className="zg-muted mt-2 text-sm leading-relaxed">{story.means}</p>
+        </section>
+      ))}
+      {shape.length > 0 ? <h2 className="zg-title pt-2 text-sm font-semibold">Biçim ve paket</h2> : null}
+      {shape.map((story) => (
         <section key={story.key} className="zg-line rounded-xl border px-4 py-4">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="zg-title text-base font-semibold">{story.title}</h2>
@@ -261,10 +352,13 @@ function Actions({ detail, narrative }: { detail: AnalysisDetail; narrative: Nar
           ))}
         </ol>
       ) : (
-        narrative.stories.map((story) => (
+        [...narrative.stories.filter((story) => !isShape(story.engine)), ...narrative.stories.filter((story) => isShape(story.engine))].map((story, index, all) => (
           <section key={story.key}>
+            {isShape(story.engine) && (index === 0 || !isShape(all[index - 1].engine)) ? (
+              <h2 className="zg-title mb-2 text-sm font-semibold">Biçim ve paket</h2>
+            ) : null}
             <h2 className="zg-title text-sm font-semibold">{story.title}</h2>
-            {narrative.stories.length > 1 ? (
+            {all.length > 1 ? (
               <p className="zg-faint mt-0.5 text-xs">Bu bulgu için. Diğer bulguların adımları ayrı.</p>
             ) : null}
             <ol className="mt-2 space-y-2">

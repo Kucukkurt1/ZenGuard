@@ -1,6 +1,10 @@
 export function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return "—";
-  if (bytes < 1024) return `${bytes} B`;
+  if (bytes === 0) return "0 KB";
+  if (bytes < 1024) {
+    const kb = Math.max(bytes / 1024, 0.01);
+    return `${kb.toFixed(2)} KB`;
+  }
   const units = ["KB", "MB", "GB"];
   let value = bytes / 1024;
   let unit = 0;

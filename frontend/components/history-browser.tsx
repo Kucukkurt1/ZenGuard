@@ -54,10 +54,6 @@ export function HistoryBrowser() {
       <div className="flex h-full min-h-0 flex-col px-4 py-4">
         <div className="mb-3">
           <h1 className="zg-title text-lg font-semibold">Analiz geçmişi</h1>
-          <p className="zg-muted mt-1 max-w-2xl text-sm">
-            Taradığınız dosyaların tamamı burada. Bir satıra tıkladığınızda rapor yeni sayfada açılır: dosya neden
-            riskli, bulgu nerede ve o bulgu için ne yapmanız gerektiği.
-          </p>
         </div>
 
         <div className="zg-panel min-h-0 flex-1 overflow-auto rounded-lg border">

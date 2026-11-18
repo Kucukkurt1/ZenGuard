@@ -16,6 +16,7 @@ from app.schemas.analysis import (
     AnalysisSummary,
     AnalysisUploadResponse,
 )
+from app.engines.excerpts import excerpts_from
 from app.services.progress import clear_progress, get_progress
 from app.services.runner import execute_analysis
 from app.services.storage import UploadTooLargeError, sanitize_filename, save_upload_streaming
@@ -48,11 +49,28 @@ def _present_summary(row: Analysis) -> AnalysisSummary:
     return item
 
 
+def _matched_lines(row: Analysis) -> list[dict]:
+    if row.status != "completed" or row.risk_band not in ("high", "critical"):
+        return []
+    root = Path(get_settings().zeng_quarantine_dir).resolve()
+    target = (root / row.storage_path).resolve()
+    if target == root or root not in target.parents or not target.is_file():
+        return []
+    try:
+        if target.stat().st_size > 1_000_000:
+            return []
+        return excerpts_from(target.read_bytes())
+    except OSError:
+        return []
+
+
 def _present_detail(row: Analysis) -> AnalysisDetail:
     item = AnalysisDetail.model_validate(row)
     summary = _present_summary(row)
     item.progress_percent = summary.progress_percent
     item.progress_stage = summary.progress_stage
+    if isinstance(item.report, dict):
+        item.report = {**item.report, "lines": _matched_lines(row)}
     return item
 
 
@@ -169,6 +187,55 @@ async def run_analysis(
         status=row.status,
         original_filename=row.original_filename,
         size_bytes=row.size_bytes,
+    )
+
+
+@router.post(
+    "/{analysis_id}/rescan",
+    response_model=AnalysisUploadResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def rescan_analysis(
+    analysis_id: UUID,
+    background: BackgroundTasks,
+    session: AsyncSession = Depends(get_db),
+) -> AnalysisUploadResponse:
+    row = await session.get(Analysis, analysis_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    if row.status not in TERMINAL_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Tarama bitmeden yeniden başlatılamaz.",
+        )
+    stored = Path(get_settings().zeng_quarantine_dir) / row.storage_path
+    if not stored.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Karantina dosyası yok.",
+        )
+
+    now = utc_now()
+    fresh = Analysis(
+        original_filename=row.original_filename,
+        sha256=row.sha256,
+        size_bytes=row.size_bytes,
+        mime_type=row.mime_type,
+        storage_path=row.storage_path,
+        status="queued",
+        created_at=now,
+        updated_at=now,
+    )
+    session.add(fresh)
+    await session.commit()
+    await session.refresh(fresh)
+    background.add_task(_kick, fresh.id)
+    return AnalysisUploadResponse(
+        id=fresh.id,
+        sha256=fresh.sha256,
+        status=fresh.status,
+        original_filename=fresh.original_filename,
+        size_bytes=fresh.size_bytes,
     )
 
 

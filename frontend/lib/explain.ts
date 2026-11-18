@@ -631,11 +631,11 @@ function staticStory(reason: FindingReason): FindingStory {
   if (!known) {
     return {
       key: `static:${code}`,
-      engine: "Statik",
+      engine: "Biçim",
       title: code,
       where: whereOf(reason),
       points: reason.points ?? 0,
-      why: `Statik analiz "${code}" işaretini ${whereOf(reason)} üzerinde yazdı.`,
+      why: `Biçim incelemesi "${code}" işaretini ${whereOf(reason)} üzerinde yazdı.`,
       means: "İşaret, dosya çalıştırılmadan görülen bir yapı özelliğidir.",
       steps: [
         {
@@ -647,7 +647,7 @@ function staticStory(reason: FindingReason): FindingStory {
   }
   return {
     key: `static:${code}`,
-    engine: "Statik",
+    engine: "Biçim",
     title: known.title,
     where: whereOf(reason),
     points: reason.points ?? 0,
@@ -667,7 +667,7 @@ function policyStory(reason: FindingReason): FindingStory {
   }
   return {
     key: `policy:${code}`,
-    engine: "Arşiv politikası",
+    engine: "Paket kuralı",
     title: known.title,
     where: whereOf(reason),
     points: reason.points ?? 100,
@@ -815,12 +815,7 @@ export function narrate(detail: AnalysisDetail): Narrative {
       : typeof floor === "number" && typeof evidence === "number" && floor > evidence
         ? ` Parça toplamı ${evidence}. Zararlı kalıp var, çalışan gövde yok: şüphe tabanı ${floor}.`
         : "";
-  const lead =
-    `${headline} Skor ${score}/100, bant ${band}. ${coverageSentence(detail.coverage)} ` +
-    "Parçalar kanıttır: ClamAV en fazla 55, YARA 40, statik 15, arşiv 10. " +
-    "Statik, dosyanın şekline bakar. Arşiv, paketin nasıl açıldığına bakar. İkisi tek başına bir tehdit sınıfı değildir." +
-    lifted +
-    " Dosya adı puana girmez.";
+  const lead = `${headline} Skor ${score}/100, bant ${band}. ${coverageSentence(detail.coverage)}${lifted}`;
 
   return { headline, lead, stories, situation };
 }

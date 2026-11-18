@@ -2,13 +2,18 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CircleHelp, History, ScanSearch, ShieldCheck } from "lucide-react";
+import { Bell, CircleHelp, ClipboardList, FolderLock, History, ScanSearch, Settings, Users } from "lucide-react";
 import { useHealth } from "@/components/use-health";
 
 const NAV = [
-  { href: "/", label: "Tarama Merkezi", hint: "Yeni dosya yükle ve tara", icon: ScanSearch },
-  { href: "/history", label: "Analiz Geçmişi", hint: "Tüm dosyalar ve detaylı raporlar", icon: History },
-  { href: "/sss", label: "Sıkça Sorulan Sorular", hint: "Skor, motorlar, deneme dosyası", icon: CircleHelp },
+  { href: "/", label: "Tarama Merkezi", icon: ScanSearch },
+  { href: "/history", label: "Analiz Geçmişi", icon: History },
+  { href: "/karantina", label: "Karantina", icon: FolderLock },
+  { href: "/denetim", label: "Denetim kaydı", icon: ClipboardList },
+  { href: "/kullanicilar", label: "Kullanıcılar", icon: Users },
+  { href: "/bildirimler", label: "Bildirimler", icon: Bell },
+  { href: "/ayarlar", label: "Ayarlar", icon: Settings },
+  { href: "/sss", label: "Sıkça Sorulan Sorular", icon: CircleHelp },
 ];
 
 const SERVICES = [
@@ -30,36 +35,29 @@ export function Sidebar() {
 
   return (
     <aside className="zg-sidebar flex h-screen w-64 shrink-0 flex-col border-r border-emerald-900/40 text-white">
-      <div className="flex h-14 items-center gap-2.5 border-b border-white/10 px-4">
-        <span className="grid h-8 w-8 place-items-center rounded-md bg-gradient-to-br from-emerald-400 to-cyan-400 text-emerald-950">
-          <ShieldCheck className="h-4 w-4" strokeWidth={2.25} />
-        </span>
-        <span className="leading-tight">
-          <span className="block text-sm font-semibold tracking-tight text-white">ZenGuard</span>
-          <span className="block text-[10px] font-medium uppercase tracking-[0.14em] text-teal-200/80">
-            Analist konsolu
-          </span>
-        </span>
+      <div className="border-b border-white/10 px-3 py-3">
+        <img
+          src="/logo.jpg"
+          alt="ZenGuard"
+          className="h-20 w-full rounded-lg object-cover object-center"
+        />
       </div>
 
-      <nav className="flex-1 space-y-0.5 px-2 py-3">
+      <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3">
         {NAV.map((item) => {
           const on = active(pathname, item.href);
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={`flex items-start gap-2.5 rounded-md px-2.5 py-2 ${
+              className={`flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm ${
                 on
                   ? "border-l-2 border-emerald-400 bg-gradient-to-r from-emerald-600/30 to-teal-600/20 text-white"
                   : "border-l-2 border-transparent text-emerald-100/80 hover:bg-white/5 hover:text-white"
               }`}
             >
-              <item.icon className="mt-0.5 h-4 w-4 shrink-0" />
-              <span className="min-w-0">
-                <span className="block text-sm leading-tight">{item.label}</span>
-                <span className="mt-0.5 block text-[11px] leading-snug text-teal-100/70">{item.hint}</span>
-              </span>
+              <item.icon className="h-4 w-4 shrink-0" />
+              {item.label}
             </Link>
           );
         })}
